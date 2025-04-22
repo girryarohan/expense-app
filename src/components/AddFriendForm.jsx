@@ -66,42 +66,50 @@ const AddFriendForm = ({ onAdded }) => {
   };
 
   return (
-    <form onSubmit={handleAdd} className="mt-4 space-y-3">
-      <input
-        type="text"
-        placeholder="Name"
-        className="w-full px-3 py-2 bg-gray-700 text-white rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        required
-      />
-      <input
-        type="email"
-        placeholder="Email"
-        className="w-full px-3 py-2 bg-gray-700 text-white rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        required
-      />
+    <form
+      onSubmit={handleAdd}
+      className="mt-6 space-y-5 bg-gray-800 p-6 rounded-2xl shadow-lg"
+    >
+      <div className="space-y-2">
+        <label className="block text-sm font-medium text-gray-300">Name</label>
+        <input
+          type="text"
+          placeholder="Enter friend's name"
+          className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring focus:ring-blue-500/40 transition"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+      </div>
+      <div className="space-y-2">
+        <label className="block text-sm font-medium text-gray-300">Email</label>
+        <input
+          type="text"
+          placeholder="Enter friend's email"
+          className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring focus:ring-blue-500/40 transition"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+      </div>
       <button
         type="submit"
         disabled={loading || !name.trim() || !email.trim()}
-        className={`w-full py-2 rounded transition ${
+        className={`w-full py-2 mt-3 rounded-xl font-semibold text-base transition ${
           loading || !name.trim() || !email.trim()
-            ? "bg-gray-600 text-gray-300 cursor-not-allowed"
-            : "bg-blue-600 text-white hover:bg-blue-700"
+            ? "bg-gray-700 text-gray-400 cursor-not-allowed"
+            : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md hover:shadow-lg"
         }`}
       >
-        {loading ? "Adding..." : "Add Friend"}
+        {loading ? "Adding..." : "➕ Add Friend"}
       </button>
+
       {msg && (
-        <p
-          className={`text-sm mt-2 ${
+        <div
+          className={`text-center text-sm font-medium mt-4 ${
             isError ? "text-red-400" : "text-green-400"
           }`}
         >
           {msg}
-        </p>
+        </div>
       )}
     </form>
   );

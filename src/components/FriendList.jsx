@@ -8,56 +8,84 @@ const FriendList = () => {
   const { currentUser } = useAuth();
   const [friends, setFriends] = useState([]);
   const [showForm, setShowForm] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const fetchFriends = async () => {
     if (!currentUser?.uid) return;
-    const snap = await getDocs(
-      collection(db, `users/${currentUser.uid}/friends`)
-    );
-    const list = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-
-    // Sort alphabetically by name
-    list.sort((a, b) => a.name.localeCompare(b.name));
-    setFriends(list);
+    try {
+      setLoading(true);
+      const snap = await getDocs(
+        collection(db, `users/${currentUser.uid}/friends`)
+      );
+      const list = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      list.sort((a, b) => a.name.localeCompare(b.name));
+      setFriends(list);
+    } catch (error) {
+      console.error("Error fetching friends:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    fetchFriends();
-  }, [currentUser]);
+    if (currentUser?.uid) {
+      fetchFriends();
+    }
+  }, [currentUser?.uid]);
 
   return (
-    <div className="bg-gray-800 p-6 text-white rounded-xl shadow-md max-w-2xl mx-auto mt-6">
-      <h2 className="text-xl font-bold mb-4">👥 Your Friends</h2>
-
-      {friends.length === 0 ? (
-        <p className="text-gray-400">You don’t have any friends yet.</p>
+    <div>
+      {loading ? (
+        <p className="text-gray-400 text-center">Loading friends...</p>
+      ) : friends.length === 0 ? (
+        <p className="text-gray-400 text-center">
+          You don’t have any friends yet.
+        </p>
       ) : (
         <>
-          <p className="text-sm text-gray-400 mb-2">{friends.length} total</p>
-          <ul className="space-y-2 text-sm">
+          <p className="text-sm text-gray-400 mb-4 text-center">
+            {friends.length} total friends
+          </p>
+
+          <div className="grid gap-4">
             {friends.map((f) => (
-              <li key={f.id} className="border-b border-gray-600 pb-2">
-                <span className="font-medium">{f.name || "Unnamed"}</span>{" "}
-                <span className="text-gray-400 text-xs">
-                  ({f.email || "no-email"})
-                </span>{" "}
+              <div
+                key={f.id}
+                className="bg-gray-700 hover:bg-gray-600 transition rounded-xl p-4 flex justify-between items-center shadow-sm"
+              >
+                <div>
+                  <p className="font-semibold text-white">
+                    {f.name || "Unnamed"}
+                  </p>
+                  <p className="text-gray-400 text-xs">
+                    {f.email || "no-email"}
+                  </p>
+                </div>
                 {f.isAppUser && (
-                  <span className="text-green-400 text-xs">✔ In App</span>
+                  <span className="px-2 py-1 text-xs rounded-full bg-green-500/20 text-green-300">
+                    ✔ In App
+                  </span>
                 )}
-              </li>
+              </div>
             ))}
-          </ul>
+          </div>
         </>
       )}
 
-      <button
-        className="mt-4 text-sm text-blue-400 hover:underline"
-        onClick={() => setShowForm((prev) => !prev)}
-      >
-        {showForm ? "Cancel" : "+ Add Friend"}
-      </button>
+      <div className="mt-6 flex justify-center">
+        <button
+          onClick={() => setShowForm((prev) => !prev)}
+          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-xl shadow-md transition text-sm"
+        >
+          {showForm ? "Cancel" : "+ Add Friend"}
+        </button>
+      </div>
 
-      {showForm && <AddFriendForm onAdded={fetchFriends} />}
+      {showForm && (
+        <div className="mt-6">
+          <AddFriendForm onAdded={fetchFriends} />
+        </div>
+      )}
     </div>
   );
 };

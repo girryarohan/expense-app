@@ -17,24 +17,23 @@ export const createGroupInFirestore = async ({
   simplify,
   createdBy,
 }) => {
-  // Format members array cleanly
+  // Normalize members: use email as id, store uid separately if available
   const formattedMembers = members.map((m) => {
-    const id = m.id?.trim() || m.email?.trim() || "";
+    const email = m.email?.trim() || "";
     return {
-      id,
+      id: email, // Use email as ID always
       name: m.name?.trim() || "",
-      email: m.email?.trim() || "",
+      email,
+      uid: m.uid || null, // Optional
       isAppUser: m.isAppUser || false,
     };
   });
 
-  // Collect unique member identifiers
-  const memberIds = formattedMembers.map((m) => m.id).filter(Boolean);
+  const memberIds = formattedMembers.map((m) => m.id); // Only email-based IDs
 
-  // Add group document
   const docRef = await addDoc(collection(db, "groups"), {
     name: groupName,
-    createdBy,
+    createdBy, // can be UID of creator
     members: formattedMembers,
     memberIds,
     totalSpent: 0,
@@ -47,13 +46,14 @@ export const createGroupInFirestore = async ({
 
 /**
  * Fetch all groups where the user is a member
+ * Lookup is done via email (always), not UID.
  */
-export const fetchUserGroups = async (uidOrEmail) => {
-  if (!uidOrEmail) return [];
+export const fetchUserGroups = async (email) => {
+  if (!email) return [];
 
   const q = query(
     collection(db, "groups"),
-    where("memberIds", "array-contains", uidOrEmail)
+    where("memberIds", "array-contains", email)
   );
 
   const snapshot = await getDocs(q);

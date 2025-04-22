@@ -1,132 +1,155 @@
-import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { doc, getDoc, collection, getDocs } from "firebase/firestore";
+import { useState, useEffect } from "react";
+import { useParams } from "react-router-dom";
 import { db } from "../config/firebase";
+import { doc, getDoc, collection, getDocs } from "firebase/firestore";
+
+import ExpensesTab from "../components/group/ExpensesTab";
+import BalancesTab from "../components/group/BalancesTab";
+import ExportTab from "../components/group/ExportTab";
+import ManageGroupTab from "../components/group/ManageGroupTab";
+import AddExpenseButton from "../components/AddExpenseButton";
 
 function GroupDetail() {
   const { groupId } = useParams();
   const [group, setGroup] = useState(null);
   const [expenses, setExpenses] = useState([]);
+  const [balances, setBalances] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState("expenses");
 
   useEffect(() => {
-    const loadGroupData = async () => {
-      setLoading(true);
-      setError(null);
-
+    const fetchGroup = async () => {
       try {
-        const docRef = doc(db, "groups", groupId);
-        const docSnap = await getDoc(docRef);
+        const groupRef = doc(db, "groups", groupId);
+        const groupSnap = await getDoc(groupRef);
 
-        if (!docSnap.exists()) {
-          setError("Group not found.");
-          setLoading(false);
-          return;
+        if (groupSnap.exists()) {
+          const groupData = { id: groupSnap.id, ...groupSnap.data() };
+          setGroup(groupData);
+
+          const expensesSnap = await getDocs(
+            collection(db, `groups/${groupId}/expenses`)
+          );
+          const expensesData = expensesSnap.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          }));
+
+          expensesData.sort(
+            (a, b) => b.expenseDateTime?.seconds - a.expenseDateTime?.seconds
+          );
+          setExpenses(expensesData);
+
+          const tempBalances = {};
+          groupData.members.forEach((m) => {
+            tempBalances[m.id] = {};
+          });
+
+          for (const expense of expensesData) {
+            const paidBy = expense.paidBy;
+            const splits = expense.splitWith || [];
+
+            splits.forEach((split) => {
+              if (split.id !== paidBy) {
+                tempBalances[split.id][paidBy] =
+                  (tempBalances[split.id][paidBy] || 0) + split.share;
+              }
+            });
+          }
+
+          const finalBalances = [];
+          Object.keys(tempBalances).forEach((from) => {
+            Object.keys(tempBalances[from]).forEach((to) => {
+              const amountFromTo = tempBalances[from][to] || 0;
+              const amountToFrom = tempBalances[to]?.[from] || 0;
+
+              if (amountFromTo > amountToFrom) {
+                finalBalances.push({
+                  from,
+                  to,
+                  amount: +(amountFromTo - amountToFrom).toFixed(2),
+                });
+              }
+            });
+          });
+
+          setBalances(finalBalances);
         }
-
-        setGroup({ id: docSnap.id, ...docSnap.data() });
-
-        const expenseSnap = await getDocs(
-          collection(db, `groups/${groupId}/expenses`)
-        );
-        const expenseList = expenseSnap.docs.map((d) => ({
-          id: d.id,
-          ...d.data(),
-        }));
-        setExpenses(expenseList);
-      } catch (err) {
-        console.error("Error loading group:", err);
-        setError("Failed to load group data.");
+      } catch (error) {
+        console.error("Error fetching group:", error);
       } finally {
         setLoading(false);
       }
     };
 
-    loadGroupData();
+    fetchGroup();
   }, [groupId]);
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-gray-500">
-        Loading group...
+      <div className="flex items-center justify-center min-h-[calc(100vh-4rem)] text-gray-400">
+        Loading...
       </div>
     );
   }
 
-  if (error) {
+  if (!group) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-red-500">
-        {error}
+      <div className="flex items-center justify-center min-h-[calc(100vh-4rem)] text-red-400">
+        Group not found.
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 px-4 py-6 sm:px-6 lg:px-12">
-      {/* Group Header */}
-      <div className="max-w-3xl mx-auto mb-6">
-        <h1 className="text-2xl font-bold text-gray-800 mb-1">{group.name}</h1>
-        <p className="text-sm text-gray-500">
-          {group.members.length} members · Total Spent: ₹{group.totalSpent || 0}
-        </p>
-      </div>
-
-      <div className="max-w-3xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Members */}
-        <div className="bg-white p-5 rounded-xl shadow-md">
-          <h2 className="text-lg font-semibold text-gray-700 mb-3">
-            👥 Members
-          </h2>
-          <ul className="space-y-2 text-sm text-gray-700">
-            {group.members.map((m, i) => (
-              <li key={i} className="border-b pb-1">
-                • <span className="font-medium">{m.name}</span>{" "}
-                <span className="text-xs text-gray-400">({m.email})</span>
-              </li>
-            ))}
-          </ul>
+    <div className="relative min-h-[calc(100vh-4rem)] bg-gray-900 text-gray-100 flex flex-col">
+      {/* Main Scrollable Content */}
+      <div className="flex-1 overflow-auto px-4 pt-8 pb-36 sm:px-6 lg:px-12">
+        <div className="max-w-4xl mx-auto mb-8 text-center">
+          <h1 className="text-3xl font-bold mb-2">{group.name}</h1>
+          <p className="text-gray-400">
+            {group.members?.length || 0} members · ₹
+            {group.totalSpent?.toFixed(2) || "0.00"} total spent
+          </p>
         </div>
 
-        {/* Expenses */}
-        <div className="bg-white p-5 rounded-xl shadow-md">
-          <h2 className="text-lg font-semibold text-gray-700 mb-3">
-            💸 Expenses
-          </h2>
-          <div className="space-y-3">
-            {expenses.map((exp) => (
-              <div
-                key={exp.id}
-                className="flex justify-between items-center border-b pb-2"
-              >
-                <div>
-                  <p className="font-medium text-gray-800">{exp.title}</p>
-                  <p className="text-xs text-gray-400">
-                    Paid by: {exp.paidBy || "Unknown"}
-                  </p>
-                </div>
-                <span className="text-sm font-semibold text-gray-700">
-                  ₹{exp.amount}
-                </span>
-              </div>
-            ))}
-            {expenses.length === 0 && (
-              <p className="text-sm text-gray-400">No expenses yet.</p>
-            )}
-          </div>
+        {/* Tabs */}
+        <div className="max-w-4xl mx-auto mb-6 flex justify-center gap-4 flex-wrap">
+          {["expenses", "balances", "export", "manage"].map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-6 py-2 rounded-full text-sm font-semibold transition ${
+                activeTab === tab
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+              }`}
+            >
+              {tab === "expenses" && "Expenses"}
+              {tab === "balances" && "Balances"}
+              {tab === "export" && "Export"}
+              {tab === "manage" && "Manage Group"}
+            </button>
+          ))}
+        </div>
+
+        {/* Tab Content */}
+        <div className="max-w-4xl mx-auto bg-gray-800 p-6 sm:p-8 rounded-2xl shadow-lg">
+          {activeTab === "expenses" && (
+            <ExpensesTab expenses={expenses} group={group} />
+          )}
+          {activeTab === "balances" && (
+            <BalancesTab balances={balances} group={group} />
+          )}
+          {activeTab === "export" && (
+            <ExportTab group={group} expenses={expenses} />
+          )}
+          {activeTab === "manage" && <ManageGroupTab group={group} />}
         </div>
       </div>
 
-      {/* Add Expense Button */}
-      <div className="fixed bottom-5 left-0 right-0 px-4 sm:px-0 flex justify-center lg:static lg:mt-10">
-        <button
-          className="w-full max-w-md lg:max-w-sm bg-blue-600 text-white py-3 px-6 rounded-xl shadow hover:bg-blue-700 transition"
-          onClick={() => navigate(`/group/${groupId}/add-expense`)}
-        >
-          + Add Expense
-        </button>
-      </div>
+      {/* Floating Add Expense Button */}
+      <AddExpenseButton />
     </div>
   );
 }

@@ -7,13 +7,10 @@ import {
   checkFriendInFriendList,
   addFriendToList,
 } from "../services/friendService";
-import Navbar from "../components/Navbar";
 
 function CreateGroup() {
   const [groupName, setGroupName] = useState("");
-  const [members, setMembers] = useState([
-    { name: "", email: "", isAppUser: false, id: "" },
-  ]);
+  const [members, setMembers] = useState([{ name: "", email: "" }]);
   const [simplify, setSimplify] = useState(true);
   const [creating, setCreating] = useState(false);
   const navigate = useNavigate();
@@ -24,28 +21,32 @@ function CreateGroup() {
     setCreating(true);
 
     const emailsSet = new Set();
-    const finalMembers = [];
-
-    for (let i = 0; i < members.length; i++) {
-      const m = members[i];
-      const trimmedEmail = m.email?.trim();
+    const memberPromises = members.map(async (m) => {
+      const trimmedEmail = m.email?.trim().toLowerCase();
       const trimmedName = m.name?.trim();
 
       if (!trimmedEmail || !trimmedName || emailsSet.has(trimmedEmail))
-        continue;
+        return null;
+      if (trimmedEmail === currentUser.email.toLowerCase()) return null;
+
       emailsSet.add(trimmedEmail);
 
       let finalMember = {
+        id: trimmedEmail, // Always use email as ID
         name: trimmedName,
         email: trimmedEmail,
         isAppUser: false,
-        id: trimmedEmail,
+        uid: null,
       };
 
       try {
         const appUser = await checkFriendInApp(trimmedEmail);
         if (appUser) {
-          finalMember = { ...finalMember, ...appUser };
+          finalMember = {
+            ...finalMember,
+            isAppUser: true,
+            uid: appUser.uid || null,
+          };
         } else {
           const friend = await checkFriendInFriendList(
             currentUser.uid,
@@ -61,20 +62,25 @@ function CreateGroup() {
         console.error("Error checking user:", err);
       }
 
-      finalMembers.push(finalMember);
-    }
-
-    finalMembers.push({
-      id: currentUser.uid,
-      name: currentUser.displayName,
-      email: currentUser.email,
-      isAppUser: true,
+      return finalMember;
     });
 
     try {
+      const resolvedMembers = await Promise.all(memberPromises);
+      const filteredMembers = resolvedMembers.filter(Boolean);
+
+      // Add the group creator
+      filteredMembers.push({
+        id: currentUser.email.toLowerCase(), // Also email
+        name: currentUser.displayName,
+        email: currentUser.email.toLowerCase(),
+        uid: currentUser.uid,
+        isAppUser: true,
+      });
+
       const groupId = await createGroupInFirestore({
         groupName: groupName.trim(),
-        members: finalMembers,
+        members: filteredMembers,
         simplify,
         createdBy: currentUser.uid,
       });
@@ -89,12 +95,12 @@ function CreateGroup() {
 
   const handleMemberChange = (index, field, value) => {
     const updated = [...members];
-    updated[index][field] = value.trimStart();
+    updated[index][field] = value;
     setMembers(updated);
   };
 
   const addMemberField = () => {
-    setMembers([...members, { name: "", email: "", isAppUser: false, id: "" }]);
+    setMembers([...members, { name: "", email: "" }]);
   };
 
   const removeMemberField = (index) => {
@@ -102,44 +108,39 @@ function CreateGroup() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col">
-      <Navbar />
-
-      <main className="flex-grow px-4 pt-6 pb-24 sm:px-6 lg:px-12">
-        <div className="max-w-2xl mx-auto bg-gray-800 p-6 sm:p-8 rounded-xl shadow-md">
-          <h2 className="text-xl font-bold mb-6 text-center text-white">
+    <div className="flex flex-col min-h-[calc(100vh-4rem)] bg-gray-900 text-gray-100">
+      <main className="flex-grow overflow-auto px-4 pt-8 pb-28 sm:px-6 lg:px-12">
+        <div className="max-w-2xl mx-auto bg-gray-800 p-8 rounded-2xl shadow-lg">
+          <h2 className="text-2xl font-bold text-center text-white mb-8">
             Create a Group
           </h2>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Group Name */}
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">
-                Group Name
-              </label>
+            <div className="space-y-2">
+              <label className="block text-sm text-gray-300">Group Name</label>
               <input
                 type="text"
-                className="w-full px-3 py-2 border border-gray-700 bg-gray-900 text-white rounded"
+                className="w-full px-4 py-2 rounded-xl bg-gray-900 border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition"
                 value={groupName}
                 onChange={(e) => setGroupName(e.target.value)}
+                placeholder="Enter group name"
                 required
               />
             </div>
 
             {/* Members */}
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">
-                Members
-              </label>
+            <div className="space-y-4">
+              <label className="block text-sm text-gray-300">Members</label>
               {members.map((member, index) => (
                 <div
                   key={index}
-                  className="flex gap-2 flex-wrap sm:flex-nowrap mb-2"
+                  className="flex gap-2 items-center bg-gray-900 p-4 rounded-lg border border-gray-700 transition"
                 >
                   <input
                     type="text"
                     placeholder="Name"
-                    className="flex-1 px-3 py-2 border border-gray-700 bg-gray-900 text-white rounded"
+                    className="flex-1 px-4 py-2 bg-gray-800 rounded-lg border border-gray-600 text-white focus:outline-none focus:ring-2 focus:ring-blue-400/50"
                     value={member.name}
                     onChange={(e) =>
                       handleMemberChange(index, "name", e.target.value)
@@ -149,7 +150,7 @@ function CreateGroup() {
                   <input
                     type="email"
                     placeholder="Email"
-                    className="flex-1 px-3 py-2 border border-gray-700 bg-gray-900 text-white rounded"
+                    className="flex-1 px-4 py-2 bg-gray-800 rounded-lg border border-gray-600 text-white focus:outline-none focus:ring-2 focus:ring-blue-400/50"
                     value={member.email}
                     onChange={(e) =>
                       handleMemberChange(index, "email", e.target.value)
@@ -160,24 +161,26 @@ function CreateGroup() {
                     <button
                       type="button"
                       onClick={() => removeMemberField(index)}
-                      className="text-red-400 text-xl"
+                      className="text-red-400 hover:text-red-300 text-lg px-2 transition"
                     >
-                      &times;
+                      ✖️
                     </button>
                   )}
                 </div>
               ))}
-              <button
-                type="button"
-                onClick={addMemberField}
-                className="text-sm text-blue-400 hover:underline mt-1"
-              >
-                + Add Member
-              </button>
+              <div className="flex justify-center">
+                <button
+                  type="button"
+                  onClick={addMemberField}
+                  className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-6 rounded-xl text-sm font-semibold transition"
+                >
+                  ➕ Add Member
+                </button>
+              </div>
             </div>
 
             {/* Simplify Debts */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <input
                 type="checkbox"
                 checked={simplify}
@@ -190,13 +193,13 @@ function CreateGroup() {
             <button
               type="submit"
               disabled={!groupName.trim() || creating}
-              className={`w-full py-2 rounded ${
+              className={`w-full py-3 rounded-xl font-semibold text-lg transition ${
                 groupName.trim() && !creating
-                  ? "bg-blue-600 hover:bg-blue-700 text-white"
+                  ? "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md hover:shadow-lg"
                   : "bg-gray-700 text-gray-400 cursor-not-allowed"
               }`}
             >
-              {creating ? "Creating..." : "Create Group"}
+              {creating ? "Creating Group..." : "🚀 Create Group"}
             </button>
           </form>
         </div>
