@@ -20,12 +20,10 @@ const BalancesTab = ({ group }) => {
   const [loading, setLoading] = useState(true);
 
   const findMemberName = (id) =>
-    group.members.find((m) => m.id === id)?.name || "Unknown";
+    group.members.find((m) => m.email.toLowerCase() === id)?.name || "Unknown";
 
-  // Simplify debts
   const simplifyDebts = (rawBalances) => {
     const balanceSheet = {};
-
     rawBalances.forEach(({ from, to, amount }) => {
       balanceSheet[from] = (balanceSheet[from] || 0) - amount;
       balanceSheet[to] = (balanceSheet[to] || 0) + amount;
@@ -41,7 +39,6 @@ const BalancesTab = ({ group }) => {
     });
 
     const simplified = [];
-
     while (debtors.length && creditors.length) {
       const debtor = debtors.pop();
       const creditor = creditors.pop();
@@ -74,7 +71,7 @@ const BalancesTab = ({ group }) => {
 
       const tempBalances = {};
       group.members.forEach((m) => {
-        tempBalances[m.id] = {};
+        tempBalances[m.email.toLowerCase()] = {};
       });
 
       for (const exp of allExpenses) {
@@ -142,7 +139,7 @@ const BalancesTab = ({ group }) => {
 
       showToast("Settlement Recorded Successfully! 🎉", "success");
       setSettling(null);
-      await fetchExpensesAndComputeBalances(); // Refresh balances properly
+      await fetchExpensesAndComputeBalances();
     } catch (error) {
       console.error("Error during settlement:", error);
       showToast("Failed to record settlement.", "error");
@@ -173,9 +170,10 @@ const BalancesTab = ({ group }) => {
           const fromName = findMemberName(balance.from);
           const toName = findMemberName(balance.to);
           const isUserInvolved =
-            balance.from === currentUser.uid || balance.to === currentUser.uid;
-          const isUserOwes = balance.from === currentUser.uid;
-          const isUserGets = balance.to === currentUser.uid;
+            balance.from === currentUser.email.toLowerCase() ||
+            balance.to === currentUser.email.toLowerCase();
+          const isUserOwes = balance.from === currentUser.email.toLowerCase();
+          const isUserGets = balance.to === currentUser.email.toLowerCase();
 
           let statusColor = "text-gray-300";
           if (isUserOwes) statusColor = "text-orange-400";

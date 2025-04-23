@@ -32,7 +32,7 @@ function CreateGroup() {
       emailsSet.add(trimmedEmail);
 
       let finalMember = {
-        id: trimmedEmail, // Always use email as ID
+        id: trimmedEmail, // Use email as ID
         name: trimmedName,
         email: trimmedEmail,
         isAppUser: false,
@@ -69,9 +69,8 @@ function CreateGroup() {
       const resolvedMembers = await Promise.all(memberPromises);
       const filteredMembers = resolvedMembers.filter(Boolean);
 
-      // Add the group creator
       filteredMembers.push({
-        id: currentUser.email.toLowerCase(), // Also email
+        id: currentUser.email.toLowerCase(),
         name: currentUser.displayName,
         email: currentUser.email.toLowerCase(),
         uid: currentUser.uid,
@@ -82,7 +81,7 @@ function CreateGroup() {
         groupName: groupName.trim(),
         members: filteredMembers,
         simplify,
-        createdBy: currentUser.uid,
+        createdBy: currentUser.email.toLowerCase(), // use email as primary key
       });
 
       navigate(`/group/${groupId}`);
@@ -116,7 +115,6 @@ function CreateGroup() {
           </h2>
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Group Name */}
             <div className="space-y-2">
               <label className="block text-sm text-gray-300">Group Name</label>
               <input
@@ -129,7 +127,6 @@ function CreateGroup() {
               />
             </div>
 
-            {/* Members */}
             <div className="space-y-4">
               <label className="block text-sm text-gray-300">Members</label>
               {members.map((member, index) => (
@@ -179,7 +176,6 @@ function CreateGroup() {
               </div>
             </div>
 
-            {/* Simplify Debts */}
             <div className="flex items-center gap-3">
               <input
                 type="checkbox"
@@ -189,7 +185,6 @@ function CreateGroup() {
               <label className="text-sm text-gray-300">Simplify Debts</label>
             </div>
 
-            {/* Submit */}
             <button
               type="submit"
               disabled={!groupName.trim() || creating}

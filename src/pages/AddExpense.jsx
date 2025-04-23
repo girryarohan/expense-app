@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { db } from "../config/firebase";
 import { useToast } from "../contexts/ToastContext";
+import { useAuth } from "../contexts/AuthContext";
 import {
   doc,
   getDoc,
@@ -12,7 +13,6 @@ import {
   Timestamp,
 } from "firebase/firestore";
 
-// Utility to format local datetime properly
 function formatLocalDateTime(date = new Date()) {
   const pad = (n) => n.toString().padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
@@ -24,6 +24,7 @@ function AddExpense() {
   const { groupId } = useParams();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { currentUser } = useAuth();
 
   const [group, setGroup] = useState(null);
   const [title, setTitle] = useState("");
@@ -31,7 +32,7 @@ function AddExpense() {
   const [paidBy, setPaidBy] = useState("");
   const [currency, setCurrency] = useState("INR");
   const [remark, setRemark] = useState("");
-  const [splitMethod, setSplitMethod] = useState("equal"); // equal | exact | percentage | shares
+  const [splitMethod, setSplitMethod] = useState("equal");
   const [splitWith, setSplitWith] = useState([]);
   const [expenseDateTime, setExpenseDateTime] = useState(() =>
     formatLocalDateTime()
@@ -44,20 +45,18 @@ function AddExpense() {
       const snapshot = await getDoc(docRef);
       const groupData = snapshot.data();
       setGroup(groupData);
-      setPaidBy(groupData.members[0].id);
-
-      // Initialize splitWith
+      setPaidBy(currentUser.email.toLowerCase());
       setSplitWith(
-        groupData.members.map((m) => ({
-          id: m.id,
+        groupData?.members?.map((m) => ({
+          id: m.email.toLowerCase(),
           name: m.name,
           share: 0,
           selected: true,
-        }))
+        })) || []
       );
     };
     fetchGroup();
-  }, [groupId]);
+  }, [groupId, currentUser.email]);
 
   const handleSplitChange = (index, field, value) => {
     const updated = [...splitWith];
@@ -70,14 +69,20 @@ function AddExpense() {
     setCreating(true);
 
     const numericAmount = parseFloat(amount);
-    let finalSplit = [];
-    const selectedMembers = splitWith.filter((m) => m.selected);
-
-    if (selectedMembers.length === 0) {
-      alert("Please select at least one member to split with!");
+    if (isNaN(numericAmount) || numericAmount <= 0) {
+      showToast("Please enter a valid amount!", "error");
       setCreating(false);
       return;
     }
+
+    const selectedMembers = splitWith.filter((m) => m.selected);
+    if (selectedMembers.length === 0) {
+      showToast("Please select at least one member to split with!", "error");
+      setCreating(false);
+      return;
+    }
+
+    let finalSplit = [];
 
     try {
       if (splitMethod === "equal") {
@@ -93,7 +98,7 @@ function AddExpense() {
           0
         );
         if (Math.abs(totalEntered - numericAmount) > 0.01) {
-          alert("Exact shares don't add up to total amount!");
+          showToast("Exact shares don't add up to total amount!", "error");
           setCreating(false);
           return;
         }
@@ -108,7 +113,7 @@ function AddExpense() {
           0
         );
         if (Math.abs(totalPercentage - 100) > 0.1) {
-          alert("Total percentage must be 100%!");
+          showToast("Total percentage must be 100%!", "error");
           setCreating(false);
           return;
         }
@@ -123,7 +128,7 @@ function AddExpense() {
           0
         );
         if (totalShares === 0) {
-          alert("Total shares cannot be zero!");
+          showToast("Total shares cannot be zero!", "error");
           setCreating(false);
           return;
         }
@@ -136,12 +141,12 @@ function AddExpense() {
         }));
       }
 
-      const localDateTime = new Date(expenseDateTime.replace("T", " ") + ":00");
+      const localDateTime = new Date(expenseDateTime);
 
       await addDoc(collection(db, `groups/${groupId}/expenses`), {
         title: title.trim(),
         amount: numericAmount,
-        paidBy,
+        paidBy: paidBy.toLowerCase(),
         splitWith: finalSplit,
         currency,
         notes: remark.trim(),
@@ -150,13 +155,14 @@ function AddExpense() {
       });
 
       await updateDoc(doc(db, "groups", groupId), {
-        totalSpent: (group.totalSpent || 0) + numericAmount,
+        totalSpent: (group?.totalSpent ?? 0) + numericAmount,
       });
 
       showToast("Expense added successfully! 🎉", "success");
       navigate(`/group/${groupId}`);
     } catch (error) {
       console.error("Error adding expense:", error);
+      showToast("Failed to add expense. Please try again.", "error");
     } finally {
       setCreating(false);
     }
@@ -179,7 +185,6 @@ function AddExpense() {
           </h2>
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Title */}
             <div className="space-y-2">
               <label className="block text-sm text-gray-300">Title</label>
               <input
@@ -192,7 +197,6 @@ function AddExpense() {
               />
             </div>
 
-            {/* Amount and Currency */}
             <div className="flex gap-4">
               <div className="flex-1 space-y-2">
                 <label className="block text-sm text-gray-300">Amount</label>
@@ -218,7 +222,6 @@ function AddExpense() {
               </div>
             </div>
 
-            {/* Paid By */}
             <div className="space-y-2">
               <label className="block text-sm text-gray-300">Paid By</label>
               <select
@@ -227,14 +230,13 @@ function AddExpense() {
                 className="w-full px-4 py-2 rounded-xl bg-gray-900 border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition"
               >
                 {group.members.map((m) => (
-                  <option key={m.id} value={m.id}>
+                  <option key={m.email} value={m.email.toLowerCase()}>
                     {m.name}
                   </option>
                 ))}
               </select>
             </div>
 
-            {/* Split Method Tabs */}
             <div className="flex gap-3">
               {["equal", "exact", "percentage", "shares"].map((method) => (
                 <button
@@ -252,7 +254,6 @@ function AddExpense() {
               ))}
             </div>
 
-            {/* Split Among Members */}
             <div className="space-y-3">
               {splitWith.map((member, index) => (
                 <div
@@ -290,7 +291,6 @@ function AddExpense() {
               ))}
             </div>
 
-            {/* Date and Time */}
             <div className="space-y-2">
               <label className="block text-sm text-gray-300">Date & Time</label>
               <input
@@ -301,7 +301,6 @@ function AddExpense() {
               />
             </div>
 
-            {/* Remark */}
             <div className="space-y-2">
               <label className="block text-sm text-gray-300">
                 Remark (optional)
@@ -315,7 +314,6 @@ function AddExpense() {
               />
             </div>
 
-            {/* Submit Button */}
             <button
               type="submit"
               disabled={!title.trim() || !amount.trim() || creating}

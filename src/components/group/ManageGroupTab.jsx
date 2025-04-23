@@ -1,20 +1,15 @@
 import React, { useState } from "react";
-import {
-  doc,
-  updateDoc,
-  arrayUnion,
-  arrayRemove,
-  deleteDoc,
-} from "firebase/firestore";
+import { doc, updateDoc, deleteDoc } from "firebase/firestore";
 import { db } from "../../config/firebase";
 import { useAuth } from "../../contexts/AuthContext";
-import { useToast } from "../../contexts/ToastContext"; // Assuming you use global toast
+import { useToast } from "../../contexts/ToastContext";
 
 const ManageGroupTab = ({ group }) => {
   const { currentUser } = useAuth();
   const { showToast } = useToast();
   const [addingEmail, setAddingEmail] = useState("");
   const [loading, setLoading] = useState(false);
+  const [simplifyDebts, setSimplifyDebts] = useState(group.simplified ?? true);
 
   const isOwner = group.createdBy === currentUser.uid;
 
@@ -22,20 +17,25 @@ const ManageGroupTab = ({ group }) => {
     if (!addingEmail.trim()) return;
 
     setLoading(true);
+    const email = addingEmail.trim().toLowerCase();
+    const newMember = {
+      id: email,
+      name: email.split("@")[0],
+      email,
+      isAppUser: false,
+    };
+
     try {
-      const updatedMembers = [
-        ...group.members,
-        {
-          id: addingEmail.trim(),
-          name: addingEmail.trim().split("@")[0],
-          email: addingEmail.trim(),
-          isAppUser: false,
-        },
-      ];
-      await updateDoc(doc(db, "groups", group.id), { members: updatedMembers });
+      const updatedMembers = [...group.members, newMember];
+      const updatedIds = [...group.memberIds, newMember.id];
+
+      await updateDoc(doc(db, "groups", group.id), {
+        members: updatedMembers,
+        memberIds: updatedIds,
+      });
 
       showToast("Member added! 🚀");
-      window.location.reload();
+      setAddingEmail("");
     } catch (err) {
       console.error("Error adding member:", err);
       showToast("Error adding member", "error");
@@ -45,15 +45,24 @@ const ManageGroupTab = ({ group }) => {
   };
 
   const handleDeleteMember = async (memberId) => {
+    if (memberId === group.createdBy) {
+      showToast("Owner cannot be removed.", "error");
+      return;
+    }
+
     if (!window.confirm("Are you sure you want to remove this member?")) return;
 
     setLoading(true);
     try {
       const updatedMembers = group.members.filter((m) => m.id !== memberId);
-      await updateDoc(doc(db, "groups", group.id), { members: updatedMembers });
+      const updatedIds = group.memberIds.filter((id) => id !== memberId);
+
+      await updateDoc(doc(db, "groups", group.id), {
+        members: updatedMembers,
+        memberIds: updatedIds,
+      });
 
       showToast("Member removed ✅");
-      window.location.reload();
     } catch (err) {
       console.error("Error removing member:", err);
       showToast("Error removing member", "error");
@@ -63,6 +72,11 @@ const ManageGroupTab = ({ group }) => {
   };
 
   const handleLeaveGroup = async () => {
+    if (currentUser.uid === group.createdBy) {
+      showToast("Owner cannot leave the group.", "error");
+      return;
+    }
+
     if (!window.confirm("Are you sure you want to leave this group?")) return;
 
     setLoading(true);
@@ -70,7 +84,12 @@ const ManageGroupTab = ({ group }) => {
       const updatedMembers = group.members.filter(
         (m) => m.id !== currentUser.uid
       );
-      await updateDoc(doc(db, "groups", group.id), { members: updatedMembers });
+      const updatedIds = group.memberIds.filter((id) => id !== currentUser.uid);
+
+      await updateDoc(doc(db, "groups", group.id), {
+        members: updatedMembers,
+        memberIds: updatedIds,
+      });
 
       showToast("You left the group 🚶‍♂️");
       window.location.href = "/";
@@ -99,31 +118,52 @@ const ManageGroupTab = ({ group }) => {
     }
   };
 
+  const handleSimplifyChange = async (value) => {
+    setSimplifyDebts(value);
+    try {
+      await updateDoc(doc(db, "groups", group.id), {
+        simplified: value,
+      });
+      showToast(value ? "Debts will be simplified ✅" : "Simplify disabled ⚠️");
+    } catch (err) {
+      console.error("Error updating simplify debts:", err);
+      showToast("Failed to update simplify option", "error");
+    }
+  };
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       {/* Members List */}
       <div>
         <h3 className="text-lg font-semibold text-white mb-4">
           👥 Current Members
         </h3>
-        <ul className="space-y-2">
+        <ul className="space-y-3">
           {group.members.map((m) => (
             <li
               key={m.id}
-              className="flex justify-between items-center bg-gray-900 p-3 rounded-lg border border-gray-700"
+              className="flex items-center justify-between bg-gray-900 p-3 rounded-lg border border-gray-700"
             >
-              <div>
-                <p className="font-medium text-white">{m.name}</p>
-                <p className="text-xs text-gray-400">{m.email}</p>
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-full bg-blue-600 text-white font-semibold flex items-center justify-center uppercase">
+                  {m.name?.charAt(0) || "?"}
+                </div>
+                <div>
+                  <p className="text-white font-medium">{m.name}</p>
+                  <p className="text-xs text-gray-400">{m.email}</p>
+                </div>
               </div>
-              {isOwner && currentUser.uid !== m.id && (
-                <button
-                  onClick={() => handleDeleteMember(m.id)}
-                  className="text-red-400 hover:text-red-300 text-sm"
-                >
-                  Remove
-                </button>
-              )}
+
+              {isOwner &&
+                currentUser.uid !== m.id &&
+                m.id !== group.createdBy && (
+                  <button
+                    onClick={() => handleDeleteMember(m.id)}
+                    className="text-red-400 hover:text-red-300 text-sm"
+                  >
+                    Remove
+                  </button>
+                )}
             </li>
           ))}
         </ul>
@@ -152,8 +192,22 @@ const ManageGroupTab = ({ group }) => {
         </div>
       )}
 
+      {/* Simplify Toggle */}
+      {isOwner && (
+        <div className="flex items-center gap-4">
+          <label className="text-sm text-gray-300 font-medium">
+            Simplify Debts
+          </label>
+          <input
+            type="checkbox"
+            checked={simplifyDebts}
+            onChange={(e) => handleSimplifyChange(e.target.checked)}
+          />
+        </div>
+      )}
+
       {/* Danger Zone */}
-      <div className="pt-8 border-t border-gray-700 space-y-4">
+      <div className="pt-6 border-t border-gray-700 space-y-4">
         <h3 className="text-lg font-semibold text-red-400">⚡ Danger Zone</h3>
 
         <button

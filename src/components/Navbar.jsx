@@ -32,14 +32,14 @@ function Navbar() {
   }, [location.pathname]);
 
   return (
-    <div className="w-full bg-blue-600 text-gray-900 px-4 sm:px-6 py-4 shadow-md flex justify-between items-center">
+    <div className="w-full bg-lime-400 text-gray-900 px-4 sm:px-6 py-4 shadow-md flex justify-between items-center">
       {/* TTMM Logo */}
       <h1
         onClick={() => navigate("/")}
         className="text-2xl font-extrabold tracking-wide cursor-pointer"
       >
-        <span className="text-white">TT</span>
-        <span className="text-black">MM</span>
+        <span className="text-rose-500">TT</span>
+        <span className="text-blue-500">MM</span>
       </h1>
 
       {/* Avatar Dropdown */}
